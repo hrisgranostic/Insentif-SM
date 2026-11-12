@@ -360,3 +360,19 @@ pre.mail { white-space: pre-wrap; font-family: var(--font); font-size: 13.5px; b
 .panduan-body ol, .panduan-body ul { margin: 0; padding-left: 18px; }
 .panduan-body li { margin-bottom: 4px; }
 @media (max-width: 720px) { .panduan-item summary { padding-right: 4px; } }
+
+/* ---------- mode simulasi ---------- */
+.sim-banner { background: var(--warn-soft); color: var(--warn); padding: 8px 16px; font-size: 13px; border-bottom: 1px solid var(--line); }
+
+/* ---------- pilihan mode simulasi di pojok kanan bawah halaman masuk ---------- */
+.sim-corner { position: fixed; right: 18px; bottom: 18px; max-width: 280px; text-align: right; z-index: 5; }
+.sim-toggle { font: inherit; font-size: 12px; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--line); background: #fff; color: var(--muted, #5b6676); cursor: pointer; }
+.sim-toggle.on { background: var(--warn-soft); color: var(--warn); border-color: var(--warn); }
+.sim-info { margin-top: 8px; font-size: 12px; color: var(--muted, #5b6676); background: #fff; border: 1px solid var(--line); border-radius: 8px; padding: 8px 10px; text-align: left; }
+
+/* ---------- hak cipta ---------- */
+.hak-cipta { color: inherit; opacity: .55; font-size: 11px; line-height: 1.5; text-align: center; }
+.hak-cipta p { margin: 0; }
+.login { grid-template-rows: 1fr auto; }
+.login-foot { grid-column: 1 / -1; padding: 12px 16px 16px; }
+.about-foot { font-size: 12px; }

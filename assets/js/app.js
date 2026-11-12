@@ -1,8 +1,14 @@
+/*
+Insentif S&M © 2026 PT Persada Medika Utama.
+Dibangun oleh Tim IT PT Persada Medika Utama. Dirancang oleh Deiky Catur Hadi.
+Seluruh hak cipta dilindungi.
+ */
 /* =====================================================================
  * app.js — kerangka aplikasi: state, router, layout, helper UI
  * ===================================================================== */
 (function () {
   'use strict';
+  /* Hak cipta: dipakai di halaman masuk dan di menu Panduan (Tentang Aplikasi) */
   var BULAN = ['Januari', 'Februari', 'Maret', 'April', 'Mei', 'Juni', 'Juli', 'Agustus', 'September', 'Oktober', 'November', 'Desember'];
 
   /* ------------------------------ format ------------------------------ */
@@ -65,6 +71,8 @@
   /* ------------------------------ state ------------------------------ */
   var S = { user: null, boot: null, route: [], periode: null };
   var App = { S: S, F: F, I: I, views: {} };
+  /* Hak cipta: dipakai di halaman masuk dan di menu Panduan (Tentang Aplikasi) */
+  App.HAK = ["Insentif S&M © 2026 PT Persada Medika Utama.", "Dibangun oleh Tim IT PT Persada Medika Utama. Dirancang oleh Deiky Catur Hadi.", "Seluruh hak cipta dilindungi."];
 
   /* Super Admin lolos semua peran, kecuali pengecekan 'SUPER' itu sendiri */
   function hasRole(r) { return !!S.user && (S.user.role.indexOf(r) >= 0 || (r !== 'SUPER' && S.user.role.indexOf('SUPER') >= 0)); }
@@ -244,7 +252,7 @@
         '<div class="side-foot"><div class="who" id="who"></div>' +
         '<div class="row"><button class="btn sm" data-act="pass">' + I.key + 'Password</button><button class="btn sm" data-act="logout">' + I.out + 'Keluar</button></div>' +
         '<div class="faint small" style="margin-top:8px">v' + F.esc(S.boot.version) + (API.DEMO ? ' · mode demo' : '') + '</div></div></aside>' +
-        '<div><div class="topbar"><button class="btn ghost sm" data-act="menu" aria-label="Buka menu">' + I.menu + '</button><b>Insentif S&amp;M</b></div>' +
+        '<div>' + (S.boot && S.boot.sim ? '<div class="sim-banner"><b>MODE SIMULASI</b> · data latihan, terpisah dari data asli, dihapus otomatis setiap 30 hari.</div>' : '') + '<div class="topbar"><button class="btn ghost sm" data-act="menu" aria-label="Buka menu">' + I.menu + '</button><b>Insentif S&amp;M</b></div>' +
         '<main class="main" id="main" tabindex="-1"></main></div>';
       app.addEventListener('click', function (e) {
         var b = e.target.closest('[data-act]');
@@ -337,7 +345,7 @@
       var pw = m.querySelector('#pjp'); setTimeout(function () { pw.focus(); }, 30);
       var go = async function () {
         try {
-          var r = await API.call('login2', { challenge: data.challenge, username: m.querySelector('#pj').value, password: pw.value });
+          var r = await API.call('login2', { challenge: data.challenge, username: m.querySelector('#pj').value, password: pw.value, sim: !!data.sim });
           m.close(); await App.afterLogin(r); resolve();
         } catch (e) { App.err(e); pw.value = ''; pw.focus(); }
       };

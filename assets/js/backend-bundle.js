@@ -54,6 +54,8 @@ var CFG = {
   /** auto-logout bila tidak ada aktivitas (menit) dan masa berlaku tahap-1 login super admin (menit) */
   IDLE_MIN: 30,
   CHALLENGE_MIN: 5,
+  /** data simulasi dibuang & dibuat ulang setiap N hari */
+  SIM_DAYS: 30,
 
   DEFAULT_SETTINGS: {
     org: { nama: 'PT. PERSADA MEDIKA UTAMA', kota: 'Surabaya', unit: 'Granostic Center' },
@@ -955,6 +957,30 @@ var Api = (function () {
     }
   }
 
+  /* ------------------------ mode simulasi ------------------------ */
+  /** Salin tabel dari data asli ke buku aktif (simulasi). Hanya data master, bukan transaksi. */
+  function simCopy(tables) {
+    DB.use('real');
+    var src = {};
+    tables.forEach(function (t) { src[t] = JSON.parse(JSON.stringify(DB.get(t))); });
+    DB.use('sim');
+    tables.forEach(function (t) { DB.set(t, src[t]); });
+    DB.flush();
+  }
+  /** Siapkan buku simulasi: bila sudah 30 hari, buang dan buat ulang sebagai salinan lengkap data asli saat ini. */
+  function simPrep() {
+    if (DB.simExpired()) simSegarkan();
+  }
+  /** Membuat ulang simulasi sebagai salinan LENGKAP data asli (semua tabel) saat ini. */
+  function simSegarkan() {
+    DB.use('sim'); DB.simRenew(); simCopy(Object.keys(CFG.TABLES)); DB.use('sim');
+  }
+  function sessMode(token) {
+    var raw = SESS.get(token);
+    if (!raw) return 'real';
+    try { return JSON.parse(raw).m === 'sim' ? 'sim' : 'real'; } catch (e) { return 'real'; }
+  }
+
   /* ----------------------------- auth ----------------------------- */
   function findUser(un) { return DB.get('Users').filter(function (x) { return String(x.username).toLowerCase() === String(un || '').toLowerCase().trim(); })[0]; }
   function isActive(u) { return u && u.aktif !== false && u.aktif !== 'FALSE'; }
@@ -966,7 +992,7 @@ var Api = (function () {
   }
   function newSession(u, x) {
     var token = U.sha256(U.uid('T') + u.username + Math.random());
-    SESS.put(token, JSON.stringify({ u: u.username, x: x ? x.username : '', t: Date.now() }));
+    SESS.put(token, JSON.stringify({ u: u.username, x: x ? x.username : '', t: Date.now(), m: DB.mode() }));
     return token;
   }
   function effUser(admin, x) {
@@ -991,21 +1017,22 @@ var Api = (function () {
         var tk0 = newSession(u, null);
         u.login_terakhir = U.nowISO(); DB.dirty('Users');
         audit(u, 'LOGIN', '', 'instalasi baru: belum ada penanggung jawab');
-        return { token: tk0, user: publicUser(u), mustChange: false, awal: true };
+        return { token: tk0, user: publicUser(u), mustChange: false, awal: true, sim: DB.mode() === 'sim' };
       }
       var ch = U.sha256(U.uid('C') + u.username + Math.random());
-      SESS.put('C' + ch, JSON.stringify({ u: u.username, t: Date.now() }));
+      SESS.put('C' + ch, JSON.stringify({ u: u.username, t: Date.now(), m: DB.mode() }));
       audit(u, 'LOGIN_ADMIN_TAHAP1', '', 'menunggu password penanggung jawab');
-      return { challenge: ch, kandidat: ks, menit: CFG.CHALLENGE_MIN };
+      return { challenge: ch, kandidat: ks, menit: CFG.CHALLENGE_MIN, sim: DB.mode() === 'sim' };
     }
     var token = newSession(u, null);
     u.login_terakhir = U.nowISO(); DB.dirty('Users');
     audit(u, 'LOGIN', '', '');
-    return { token: token, user: publicUser(u), mustChange: false };
+    return { token: token, user: publicUser(u), mustChange: false, sim: DB.mode() === 'sim' };
   }
   function login2(p) {
     var raw = p.challenge ? SESS.get('C' + p.challenge) : null, c = raw ? JSON.parse(raw) : null;
-    if (!c || Date.now() - c.t > CFG.CHALLENGE_MIN * 60000) { if (p.challenge) SESS.del('C' + p.challenge); throw new Error('Waktu login habis. Ulangi dari username dan password admin.'); }
+    if (!c || (c.m || 'real') !== DB.mode()) { if (p.challenge) SESS.del('C' + p.challenge); throw new Error('Waktu login habis. Ulangi dari username dan password admin.'); }
+    if (Date.now() - c.t > CFG.CHALLENGE_MIN * 60000) { if (p.challenge) SESS.del('C' + p.challenge); throw new Error('Waktu login habis. Ulangi dari username dan password admin.'); }
     var admin = findUser(c.u), x = findUser(p.username);
     var who = { username: c.u + ' atas nama ' + (p.username || '(kosong)') };
     if (!admin || !isActive(admin)) throw new Error('Akun admin tidak aktif.');
@@ -1016,7 +1043,7 @@ var Api = (function () {
     admin.login_terakhir = U.nowISO(); x.login_terakhir = U.nowISO(); DB.dirty('Users');
     var e = effUser(admin, x);
     audit(e, 'LOGIN', '', 'sebagai Super Admin');
-    return { token: token, user: publicUser(e), mustChange: false };
+    return { token: token, user: publicUser(e), mustChange: false, sim: DB.mode() === 'sim' };
   }
   /** Mengembalikan pengguna efektif sesi, atau null (sesi tidak ada / idle / akun nonaktif). */
   function userFromToken(token) {
@@ -1042,7 +1069,7 @@ var Api = (function () {
     var S = Engine.settings();
     return {
       user: publicUser(u), settings: { org: S.org, doc_no: S.doc_no, signers: S.signers, apd_marker: S.apd_marker, app_url: S.app_url, email_notif: S.email_notif, increment_over_target: S.increment_over_target, pembulatan_rate: S.pembulatan_rate },
-      staff: DB.get('Staff'), periods: DB.get('Periods'), roles: CFG.ROLES, version: CFG.VERSION, idle_min: CFG.IDLE_MIN, tiers: DB.get('RateTiers')
+      staff: DB.get('Staff'), periods: DB.get('Periods'), roles: CFG.ROLES, version: CFG.VERSION, idle_min: CFG.IDLE_MIN, sim: DB.mode() === 'sim', tiers: DB.get('RateTiers')
     };
   }
 
@@ -1258,6 +1285,7 @@ var Api = (function () {
     };
   }
   function notify(P, step, kind, note) {
+    if (DB.mode() === 'sim') return; // simulasi: tidak mengirim notifikasi
     if (typeof HOOKS === 'undefined' || !HOOKS.notify) return;
     try {
       var S = Engine.settings();
@@ -1446,7 +1474,7 @@ var Api = (function () {
   function htmlEsc(t) { return String(t == null ? '' : t).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); }
   /** Kirim email + lampiran PDF. Mode demo (tanpa MailApp) hanya mensimulasikan. Hasil: true = benar-benar terkirim. */
   function sendMail(o) {
-    if (typeof MailApp === 'undefined') return false;
+    if (typeof MailApp === 'undefined' || DB.mode() === 'sim') return false; // simulasi: tidak mengirim email sungguhan
     var opt = {
       to: o.to.join(','), subject: o.subject, htmlBody: o.html, name: 'Sistem Insentif S&M',
       attachments: [Utilities.newBlob(Utilities.base64Decode(o.pdf), 'application/pdf', o.file)]
@@ -1743,12 +1771,23 @@ var Api = (function () {
   var WATCHED = { report: 1, resume: 1, clientDetail: 1, mailInfo: 1, imports: 1 };
   function handle(req) {
     try {
-      ensureDefaults();
       var a = req.action, p = req.payload || {};
+      // pilih buku data: login memakai flag p.sim, aksi lain mengikuti sesi
+      var mode = (a === 'login' || a === 'login2') ? (p.sim ? 'sim' : 'real') : (req.token ? sessMode(req.token) : 'real');
+      DB.use(mode);
+      if (mode === 'sim') { simPrep(); if (a === 'login') simCopy(['Users']); } // akun simulasi disamakan dengan akun asli
+      ensureDefaults();
       if (a === 'ping') return ok({ app: CFG.APP_NAME, version: CFG.VERSION, time: U.nowISO() });
       if (a === 'login') { var r = login(p); DB.flush(); return ok(r); }
       if (a === 'login2') { var r2 = login2(p); DB.flush(); return ok(r2); }
-      if (a === 'verify') return ok(verify(p));
+      if (a === 'verify') {
+        var vr = verify(p);
+        if (!vr.found && DB.mode() === 'real') { // QR dari hasil latihan juga bisa diperiksa, ditandai simulasi
+          try { DB.use('sim'); vr = verify(p); if (vr.found) vr.simulasi = true; } catch (e) { vr = { found: false }; }
+          DB.use('real');
+        }
+        return ok(vr);
+      }
       var u = userFromToken(req.token);
       if (!u) return { ok: false, error: 'Sesi berakhir, silakan login lagi.', auth: false };
       var out;
@@ -1806,6 +1845,8 @@ var Api = (function () {
     } catch (e) {
       if (DB.rollback) DB.rollback();
       return fail(e);
+    } finally {
+      DB.use('real'); // selalu kembali ke buku asli setelah satu permintaan
     }
   }
 
@@ -1818,5 +1859,5 @@ var Api = (function () {
     catch (e) { if (DB.rollback) DB.rollback(); throw e; }
   }
 
-  return { handle: handle, ensureDefaults: ensureDefaults, hashPass: hashPass, seedRun: seedRun };
+  return { handle: handle, ensureDefaults: ensureDefaults, hashPass: hashPass, seedRun: seedRun, simPrep: simPrep, simSegarkan: simSegarkan };
 })();

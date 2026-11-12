@@ -9,6 +9,9 @@
   try { localStorage.setItem('__t', '1'); localStorage.removeItem('__t'); store = localStorage; } catch (e) { store = null; }
   var KEY = 'insentif_sm_demo_v1';
   window.DB = window.MemDB({ storage: store, key: KEY });
+  // mode demo hanya punya satu buku data (simulasi tidak dipakai di demo)
+  window.DB.use = function () {}; window.DB.mode = function () { return 'real'; };
+  window.DB.simExpired = function () { return false; }; window.DB.simRenew = function () {};
   var mem = {};
   window.SESS = {
     put: function (t, u) { mem[t] = u; try { store && store.setItem('ism_sess_' + t, u); } catch (e) {} },

@@ -22,18 +22,31 @@
       '<section class="login-form"><form id="lf" autocomplete="on"><h2>Masuk</h2><p class="muted" style="margin-bottom:18px">Gunakan akun yang dibuat Admin HR.</p>' +
       '<div class="field"><label for="lu">Username</label><input class="in" id="lu" name="username" autocomplete="username" required></div>' +
       '<div class="field"><label for="lp">Password</label><input class="in" id="lp" type="password" name="password" autocomplete="current-password" required></div>' +
-      '<button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit">Masuk</button>' +
+      '<button class="btn primary" style="width:100%;justify-content:center;padding:10px" type="submit" id="masuk">Masuk</button>' +
       '<p class="small faint" style="margin-top:14px">Lupa password? Minta Admin HR mengatur ulang.</p>' +
       (demo ? '<div class="note" style="margin-top:16px"><b>Mode demo</b> — pilih akun di bawah (password <code>demo123</code>) untuk mencoba alur persetujuan.</div><div class="demo-users">' +
         DemoBackend.users.map(function (u) { return '<button type="button" data-u="' + u.username + '"><b>' + F.esc(u.nama) + '</b><span class="faint">' + F.esc(u.jabatan) + '</span></button>'; }).join('') + '</div>' : '') +
-      '</form></section></div>';
-    var f = document.getElementById('lf');
+      '</form>' +
+      (demo ? '' : '<div class="sim-corner"><button type="button" id="simToggle" aria-pressed="false" class="sim-toggle">Mode simulasi: nonaktif</button>' +
+        '<p id="simInfo" class="sim-info" hidden>Masuk akan memakai <b>mode simulasi</b>: latihan dengan akun yang sama. Data terpisah dari data asli dan dihapus otomatis setiap 30 hari.</p></div>') +
+      '</section>' +
+      '<footer class="hak-cipta login-foot">' + App.HAK.map(function (l) { return '<p>' + F.esc(l) + '</p>'; }).join('') + '</footer></div>';
+    var f = document.getElementById('lf'), simMode = false;
     f.onsubmit = async function (e) {
       e.preventDefault();
-      try { await App.afterLogin(await API.call('login', { username: f.username.value, password: f.password.value })); } catch (er) { App.err(er); }
+      var sim = simMode; simMode = false;
+      try { await App.afterLogin(await API.call('login', { username: f.username.value, password: f.password.value, sim: sim })); } catch (er) { App.err(er); }
+    };
+    var stog = document.getElementById('simToggle');
+    if (stog) stog.onclick = function () {
+      simMode = !simMode;
+      stog.setAttribute('aria-pressed', simMode ? 'true' : 'false');
+      stog.textContent = 'Mode simulasi: ' + (simMode ? 'aktif' : 'nonaktif');
+      stog.classList.toggle('on', simMode);
+      document.getElementById('simInfo').hidden = !simMode;
     };
     app.querySelectorAll('[data-u]').forEach(function (b) {
-      b.onclick = function () { f.username.value = b.getAttribute('data-u'); f.password.value = 'demo123'; f.requestSubmit(); };
+      b.onclick = function () { simMode = false; f.username.value = b.getAttribute('data-u'); f.password.value = 'demo123'; f.requestSubmit(); };
     });
   };
 
@@ -48,7 +61,7 @@
       try {
         var r = await API.call('verify', { kode: kode });
         if (!r.found) vb.innerHTML = '<div class="note err">Kode <b>' + F.esc(kode) + '</b> tidak terdaftar. Dokumen ini bukan hasil sistem, atau kodenya salah ketik.</div>' + form;
-        else vb.innerHTML = '<div class="note ' + (r.valid ? '' : 'warn') + '" style="margin-bottom:14px">' + (r.valid ? '<b style="color:var(--cash)">Sah.</b> Persetujuan ini tercatat di sistem dan data perhitungannya belum berubah.' : '<b>Tidak berlaku lagi.</b> Persetujuan pernah tercatat, tapi periode ini sudah dibuka kembali atau dihitung ulang setelahnya.') + '</div>' +
+        else vb.innerHTML = '<div class="note ' + (r.valid ? '' : 'warn') + '" style="margin-bottom:14px">' + (r.simulasi ? '<b>Data simulasi (latihan).</b> ' : '') + (r.valid ? '<b style="color:var(--cash)">Sah.</b> Persetujuan ini tercatat di sistem dan data perhitungannya belum berubah.' : '<b>Tidak berlaku lagi.</b> Persetujuan pernah tercatat, tapi periode ini sudah dibuka kembali atau dihitung ulang setelahnya.') + '</div>' +
           '<dl class="kv"><dt>Periode</dt><dd>' + F.esc(r.label) + '</dd><dt>Langkah</dt><dd>' + F.esc(r.langkah.replace(/,\s*$/, '')) + '</dd><dt>Oleh</dt><dd>' + F.esc(r.nama) + '</dd><dt>Jabatan</dt><dd>' + F.esc(r.jabatan) + '</dd><dt>Waktu</dt><dd>' + F.esc(F.waktu(r.pada)) + '</dd><dt>Status periode</dt><dd>' + F.esc(r.status) + '</dd></dl>' + form;
       } catch (e) { vb.innerHTML = '<div class="note err">' + F.esc(e.message) + '</div>' + form; }
     }
